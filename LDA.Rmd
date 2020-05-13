@@ -29,6 +29,8 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 1. [Ecologically meaningful transformations for ordination of species data](https://link.springer.com/article/10.1007/s004420100716)
+
+
 ---
 
 # Package
@@ -45,7 +47,7 @@ source('Source_LDA.R') # ModelPerformance
 
 ---
 
-# Data
+# EDA
 
 ## Standardization
 ```{r}
@@ -63,18 +65,18 @@ table(iris.gr)
 ```
 
 
-# Missing values
+## Missing values
 
 ```{r}
 any(is.na(iris))
 ```
 
-# Multivariate homogeneity
+## Multivariate homogeneity
 
 ```{r}
-iris.pars <- iris[, 1:4] %>% as.matrix
+iris.pars <- iris[,1:4] %>% as.matrix
 iris.pars.d <- dist(iris.pars)
-iris.MHV <- betadisper(iris.pars.d, gr)
+iris.MHV <- betadisper(iris.pars.d, iris.gr)
 
 iris.MHV
 plot(iris.MHV)
@@ -84,21 +86,23 @@ permutest(iris.MHV)
 
 ```
 
-# Boxplot
+## Boxplot
 ```{r}
 par(mfrow = c(1, ncol(iris.pars)))
 for(j in 1:ncol(iris.pars)){
-  boxplot(iris.pars[,j], col = (j+1) )
+  boxplot(iris.pars[,j], 
+          col = (j+1), 
+          main = colnames(iris.pars)[j])
   }
 ```
 
 
-# Skewness
+## Skewness
 ```{r}
 timeDate::skewness(iris[1:4])
 ```
 
-# Outliers
+## Outliers
 ```{r}
 outliers::outlier(iris[2])
 ```
@@ -108,27 +112,30 @@ which(iris[2] >= 4.1 | iris[2] < 2.2) # depend on boxplot
 ```
 
 
-# Transformation
+## Transformation
 ```{r}
 ptr <- which(iris[2] >= 4.1 | iris[2] < 2.2)
 iris[ptr, 2] <- mean(iris[,2])
 
-iris2 <- cbind(log(iris[1]), iris[2], iris[3], iris[4])
+iris2 <- cbind(log(iris[1]), iris[2], iris[3], iris[4], iris[5])
 
 ```
 
 ```{r}
+## Check Again
+
 timeDate::skewness(iris2[1:4])
 
-par(mfrow = c(1, ncol(iris2.pars)))
-for(j in 1:ncol(iris2.pars)){
-  boxplot(iris2.pars[,j], col = (j+1) )
-  }
+
+iris2.cluster <- iris.hle %>% vegdist("euc") %>% hclust("ward.D2")
+plot(iris2.cluster)
+iris2.gr <-  iris2.cluster %>% cutree(3)
+table(iris2.gr)
 
 
 iris2.pars <- iris2[, 1:4] %>% as.matrix
 iris2.pars.d <- dist(iris2.pars)
-iris2.MHV <- betadisper(iris2.pars.d, gr)
+iris2.MHV <- betadisper(iris2.pars.d, iris2.gr)
 
 iris2.MHV
 par(mfrow = c(1,1))
@@ -136,5 +143,241 @@ plot(iris2.MHV)
 
 anova(iris2.MHV)
 permutest(iris2.MHV)
+
+
+par(mfrow = c(1, ncol(iris2.pars)))
+for(j in 1:ncol(iris2.pars)){
+  boxplot(iris2.pars[,j], 
+          col = (j+1), 
+          main = colnames(iris2.pars)[j])
+  }
+
+
 ```
+
+
+## Normality
+```{r}
+par(mfrow = c(1, ncol(iris2.pars)))
+for(j in 1:ncol(iris2.pars)){
+  hist(iris2.pars[,j], 
+       col = (j+1),
+       main = colnames(iris2.pars)[j])
+}
+par(mfrow = c(1, 1))
+```
+
+
+```{r}
+RVAideMemoire::mshapiro.test(iris2.pars)
+```
+
+
+
+## Multicollinearity
+
+```{r}
+as.dist(cor(iris2.pars))
+```
+
+
+```{r}
+iris2.vif <- faraway::vif(iris2.pars)
+
+iris2.vif 
+```
+
+
+```{r}
+ptr <- which.max(iris2.vif)
+
+iris3 <- iris2[, -ptr]
+iris3.pars <- iris2.pars[, -ptr]
+```
+
+
+## Linearity
+
+```{r}
+psych::pairs.panels(iris2[1:4], 
+                    gap = 0, 
+                    bg = c("red", "blue", "green")[iris2$Species], 
+                    pch = 21)
+```
+
+
+
+# LDA
+
+## Setting
+
+```{r}
+data <- iris3
+
+set.seed(20200513)
+train_proportion = 0.9
+
+formula <- formula(Species ~ Sepal.Length + Sepal.Width + Petal.Width)
+Y_attribute = 'Species'
+
+```
+
+
+## Model
+
+```{r}
+dataPartition = Partition(data, train_proportion)
+
+training = dataPartition$training
+testing = dataPartition$testing
+
+model.LDA <- MASS::lda(formula,
+                       data = training)
+
+model.LDA
+```
+
+
+## Plot
+
+To install "ggord" package :
+- Step 1 : install.paclages('ps')
+- Step 2 : install.paclages('vctrs')
+- Step 3 : devtools::install_github('fawda123/ggord')
+
+```{r}
+library(ggord)
+ggord(model.LDA, training[,Y_attribute])
+```
+
+
+```{r}
+klaR::partimat(formula, 
+         data = training,
+         method = "lda", 
+         nplots.vert = 1)
+```
+
+
+
+
+## Predict
+
+### Training
+
+```{r}
+# Apparent Performance
+pred.LDA.train <- predict(model.LDA, 
+                    newdata = training)
+
+
+perform.LDA.Apparent <- ModelPerformance(pred.LDA.train$class, training[,Y_attribute])
+
+perform.LDA.Apparent$confusion_matrix
+
+perform.LDA.Apparent$ACC
+
+```
+
+
+
+### Testing
+```{r message=FALSE, warning=FALSE}
+
+# True Performance
+pred.LDA.test <- predict(model.LDA, 
+                    newdata=testing,
+                    type="class")
+
+perform.LDA.True <- ModelPerformance(pred.LDA.test$class, testing[,Y_attribute])
+
+## Confusion Matrix
+perform.LDA.True$confusion_matrix
+
+## Accuracy
+perform.LDA.True$ACC
+
+
+
+```
+
+
+## Canonic discrimination evaluation
+
+### Canonic value calculation
+
+```{r}
+LDA.var <- model.LDA$svd ^ 2 
+
+LDA.var_explained <- 100 * LDA.var/ sum(LDA.var) 
+
+LDA.var_explained 
+```
+
+
+### Canonic correlation
+```{r}
+LD <- predict(model.LDA)$x
+Y = training[, Y_attribute]
+
+lm(LD ~ Y) %>% summary() # Not Y ~ LD
+```
+
+
+### Classification accuracy
+
+```{r}
+cm <- perform.LDA.Apparent$confusion_matrix
+cm
+
+psych::cohen.kappa(cm)
+
+pred.LDA.train.num <-  pred.LDA.train$class %>% as.factor %>% as.numeric
+Y_num <-  training[, Y_attribute] %>%  as.factor %>% as.numeric
+cor.test(Y_num,pred.LDA.train.num, method = "kendall")
+
+```
+
+
+### Crossed Validation
+
+```{r}
+model.LDA.cv <- MASS::lda(formula,
+                       data = data,
+                       CV = TRUE)
+summary(model.LDA.cv)
+
+ModelPerformance(model.LDA.cv$class, data[,Y_attribute])
+
+```
+
+
+
+
+# QDA
+
+## Model
+
+```{r}
+model.QDA.cv <- MASS::qda(formula = formula,
+                       data = data, 
+                       CV = TRUE)
+
+summary(model.QDA.cv)
+
+ModelPerformance(model.QDA.cv$class, data[,Y_attribute])
+```
+
+
+## Plot
+
+```{r}
+klaR::partimat(formula, 
+         data = training,
+         method = "qda", 
+         nplots.vert = 1)
+```
+
+
+
 
