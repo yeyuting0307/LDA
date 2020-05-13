@@ -1,0 +1,140 @@
+---
+title: "LDA"
+author: "Mike"
+date: "2020/5/13"
+output: 
+  html_document: 
+    theme: united
+    toc: yes
+    toc_float: yes
+editor_options: 
+  
+  
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Reference
+
+1. [機器學習: 分類(Classification)-線性區別分析( Linear Discriminant Analysis)](https://medium.com/@chih.sheng.huang821/%E6%A9%9F%E5%99%A8%E5%AD%B8%E7%BF%92-%E9%99%8D%E7%B6%AD-dimension-reduction-%E7%B7%9A%E6%80%A7%E5%8D%80%E5%88%A5%E5%88%86%E6%9E%90-linear-discriminant-analysis-d4c40c4cf937)
+
+
+1. [Linear Discriminant Analysis -David Valls Lanàquera](https://www.rpubs.com/dvallslanaquera/lda)
+
+
+1. [Hellinger transformation of vector of abundances](https://stats.stackexchange.com/questions/344760/is-hellinger-transformation-suitable-to-access-species-abundance-environmental)
+
+
+1. [Ecologically meaningful transformations for ordination of species data](https://link.springer.com/article/10.1007/s004420100716)
+---
+
+# Package
+
+
+```{r message=FALSE, warning=FALSE}
+library(dplyr) 
+library(magrittr)
+library(ggplot2) 
+library(vegan) # standardization 
+source('Source_LDA.R') # ModelPerformance
+```
+
+
+---
+
+# Data
+
+## Standardization
+```{r}
+iris.hle <- iris[1:4] %>% as.matrix %>% decostand("hellinger") 
+```
+
+## Cluster
+```{r}
+
+iris.cluster <- iris.hle %>% vegdist("euc") %>% hclust("ward.D2")
+plot(iris.cluster)
+
+iris.gr <-  iris.cluster %>% cutree(3)
+table(iris.gr)
+```
+
+
+# Missing values
+
+```{r}
+any(is.na(iris))
+```
+
+# Multivariate homogeneity
+
+```{r}
+iris.pars <- iris[, 1:4] %>% as.matrix
+iris.pars.d <- dist(iris.pars)
+iris.MHV <- betadisper(iris.pars.d, gr)
+
+iris.MHV
+plot(iris.MHV)
+
+anova(iris.MHV)
+permutest(iris.MHV)
+
+```
+
+# Boxplot
+```{r}
+par(mfrow = c(1, ncol(iris.pars)))
+for(j in 1:ncol(iris.pars)){
+  boxplot(iris.pars[,j], col = (j+1) )
+  }
+```
+
+
+# Skewness
+```{r}
+timeDate::skewness(iris[1:4])
+```
+
+# Outliers
+```{r}
+outliers::outlier(iris[2])
+```
+
+```{r}
+which(iris[2] >= 4.1 | iris[2] < 2.2) # depend on boxplot
+```
+
+
+# Transformation
+```{r}
+ptr <- which(iris[2] >= 4.1 | iris[2] < 2.2)
+iris[ptr, 2] <- mean(iris[,2])
+
+iris2 <- cbind(log(iris[1]), iris[2], iris[3], iris[4])
+
+```
+
+```{r}
+timeDate::skewness(iris2[1:4])
+
+par(mfrow = c(1, ncol(iris2.pars)))
+for(j in 1:ncol(iris2.pars)){
+  boxplot(iris2.pars[,j], col = (j+1) )
+  }
+
+
+iris2.pars <- iris2[, 1:4] %>% as.matrix
+iris2.pars.d <- dist(iris2.pars)
+iris2.MHV <- betadisper(iris2.pars.d, gr)
+
+iris2.MHV
+par(mfrow = c(1,1))
+plot(iris2.MHV)
+
+anova(iris2.MHV)
+permutest(iris2.MHV)
+```
+
